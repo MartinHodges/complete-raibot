@@ -1,0 +1,22 @@
+{
+  "name": "remote-logger",
+  "version": "1.0.0",
+  "description": "Provides a remote listening point for remote logs from a robot",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc && chmod 755 build/index.js",
+    "dev": "nodemon --watch src --ext ts --exec \"npm run build && node build/index.js\"",
+    "start:mcp": "export DANGEROUSLY_OMIT_AUTH=true && NODE_ENV=development && LOG_LEVEL=debug && npm run build && npx @modelcontextprotocol/inspector node ./build/index.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.1.0",
+    "nodemon": "^3.1.10"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.23",
+    "@types/node": "^22.17.0",
+    "typescript": "^5.9.2"
+  }
+}
