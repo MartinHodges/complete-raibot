@@ -80,6 +80,9 @@ class Motor:
         
         print(f"{self.sm} {side}")
     
+    def get_clicks(self):
+        return self.clicks
+    
     def get_running_time(self):
         return self.running_time
 
@@ -120,6 +123,11 @@ class Motor:
         self.emergency_stopped = True
         self.logger.log(f"Motor {self.side} emergency stopped")
 
+    def adjust_duty(self, duty_delta):
+        if self.running:
+            new_duty = int((self.last_duty * .9) + duty_delta)
+            self.pwm.duty_u16(new_duty if new_duty < 65535 else 65535)
+
     def start_motor(self, direction, duty, clicks):
         
         print(f"{direction} {duty} {clicks}")
@@ -131,16 +139,17 @@ class Motor:
         else:
             self.logger.log(f"Starting Motor {self.side} at {duty} duty for {clicks} clicks...")
 
+            new_duty = duty if duty <= 65535 else 65535
+
             self.last_clicks_target = clicks
             self.last_duty = duty
             self.running = True
             self.last_direction = 1 if direction else 0
             self.direction.value(self.last_direction)
-            self.last_duty = duty if duty < 65536 else 65536
+            self.last_duty = new_duty
             self.running_time = None
-            self.last_start_time = time.ticks_us()
             self.clicks = clicks
-            self.pwm.duty_u16(self.last_duty)
-            self.sm.put(constants.DISTANCE_STEP)
             self.emergency_stopped = False
-
+            self.sm.put(constants.DISTANCE_STEP)
+            self.last_start_time = time.ticks_us()
+            self.pwm.duty_u16(new_duty)

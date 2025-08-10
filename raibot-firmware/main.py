@@ -25,6 +25,13 @@ debug = False
 
 calibrate = False
 
+P = 35
+I = 0.7
+D = 1
+
+total_diff = 0
+prev_diff = 0
+
 def init_pins():
     global bumps
     bumps = [
@@ -34,21 +41,32 @@ def init_pins():
         Pin(BUMP_CONFIG[constants.BACK], Pin.IN, Pin.PULL_UP)
         ]
 
-def calc_calibration():
-    global cal_adjustment
+def calibrate():
+    return  left_motor.is_running() and right_motor.is_running() and left_motor.last_duty_value() == right_motor.last_duty_value() and left_motor.get_clicks() and right_motor.get_clicks()
+            
 
-    if left_motor.get_running_time() is None or right_motor.get_running_time() is None:
-        return
+def calc_offset():
+    global cal_adjustment, total_diff, prev_diff
+    
+    if calibrate():
+        left_count = left_motor.get_clicks() / constants.DISTANCE_STEP
+        right_count = right_motor.get_clicks() / constants.DISTANCE_STEP
+        diff = left_count - right_count
+        total_diff += diff
+        delta = diff - prev_diff
+        prev_diff = diff
+        
+        p = diff * P
+        i = total_diff * I
+        d = delta * D
+        
+        cal_adjustment = p + i + d
+        
+        left_motor.adjust_duty(+ cal_adjustment)
+        right_motor.adjust_duty(- cal_adjustment)
+        
+        print(f"P {p} I {i} D {d} a {cal_adjustment}")
 
-    if left_motor.was_emergency_stopped() or right_motor.was_emergency_stopped():
-        return
-
-    if right_motor.get_running_time() == 0 or left_motor.get_running_time() == 0:
-        return
-
-    adjustment = right_motor.get_running_time() / left_motor.get_running_time()
-    cal_adjustment = adjustment * (cal_adjustment if cal_adjustment > 0.5 else 1)
-    my_logger.log(f"Adjustment factor: {cal_adjustment}")
  
 # --- Custom URL Query String Parser for MicroPython ---
 def parse_qs_micropython(query_string):
@@ -74,7 +92,7 @@ def parse_qs_micropython(query_string):
 
 # --- HTTP Server Thread Function ---
 def http_server_thread():
-    global actual_target_pulses, debug
+    global actual_target_pulses, debug, P, I, D
     addr = socket.getaddrinfo('0.0.0.0', constants.WEB_PORT)[0][-1]
     s = socket.socket()
     # Allow the port to be reused
@@ -99,6 +117,38 @@ def http_server_thread():
 
             if "POST /debug" in request_line:
                 debug = not debug
+            elif "POST /pid" in request_line:
+                headers, body = data.split("\r\n\r\n", 1)
+                if debug:
+                    my_logger.log(f"Headers received:\n{headers}")
+
+                # Extract Content-Length
+                content_length = 0
+                for line in headers.split("\r\n"):
+                    if line.lower().startswith("content-length"):
+                        content_length = int(line.split(":")[1].strip())
+                        break
+
+                # If not all body bytes are received yet
+                while len(body) < content_length:
+                    body += conn.recv(1024).decode() 
+
+                if debug:
+                    my_logger.log(f"Raw body:\n {body}")
+                    
+                # Parse JSON
+                new_state = ujson.loads(body)
+                P = float(new_state["P"])
+                I = float(new_state["I"])
+                D = float(new_state["D"])
+                
+                left_motor.start_motor(constants.FORWARD, constants.DEFAULT_SPEED_DUTY, constants.DEFAULT_TARGET_CLICKS)
+                right_motor.start_motor(constants.FORWARD, constants.DEFAULT_SPEED_DUTY, constants.DEFAULT_TARGET_CLICKS)
+
+                while left_motor.is_running() or right_motor.is_running():
+                    calc_offset()
+                    time.sleep(0.01)
+
             elif "POST /motor" in request_line:
                 headers, body = data.split("\r\n\r\n", 1)
                 if debug:
@@ -163,8 +213,8 @@ def http_server_thread():
                     my_logger.log(f"Parsed JSON:\n {data}")
 
                 while left_motor.is_running() or right_motor.is_running():
-                    time.sleep(0.1)
-                calc_calibration()
+                    calc_offset()
+                    time.sleep(0.01)
 
             html_content = f"""
 {{
@@ -187,9 +237,12 @@ def http_server_thread():
         "left":  "{bumps[constants.LEFT].value()}",
         "right": "{bumps[constants.RIGHT].value()}",
         "back":  "{bumps[constants.BACK].value()}"
-    }}
+    }},
+    "P": "{P}",
+    "I": "{I}",
+    "D": "{D}"
 }}
-                """
+"""
             response = 'HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n' + html_content
             conn.send(response)
             conn.close()
@@ -248,8 +301,8 @@ try:
     right_motor.start_motor(constants.FORWARD, constants.DEFAULT_SPEED_DUTY, constants.DEFAULT_TARGET_CLICKS)
 
     while left_motor.is_running() or right_motor.is_running():
-        time.sleep(0.1)
-    calc_calibration()
+        calc_offset()
+        time.sleep(0.01)
     
     # The main loop simply keeps the script running.
     # All active motor control and HTTP serving happens in threads and PIO.
@@ -273,5 +326,3 @@ except KeyboardInterrupt:
     motors[constants.LEFT].emergency_stop()
     motors[constants.RIGHT].emergency_stop()
     my_logger.log("\nStopped")
-        
-

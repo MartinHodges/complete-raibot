@@ -31,8 +31,8 @@ export default function registerRaibotProxyTool(server: McpServer) {
       let body: any
       let response: Status
 
-      // There are approximately 6.5 clicks per degree of rotation
-      const degrees = Math.trunc((args.rotation || 0) * 1170 / 180.0)
+      // There are approximately 6.39 clicks per degree of rotation
+      const degrees = Math.trunc((args.rotation || 0) * 1150 / 180.0)
       // There are approximately 69 clicks per cm of travel
       const distance = Math.trunc((args.distance || 0) * 2000 / 29.0)
       // The PWM has 16 bit resolution

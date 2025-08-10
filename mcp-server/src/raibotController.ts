@@ -33,7 +33,10 @@ export type Status = {
     left: number,
     right: number,
     back: number
-  }
+  },
+  p: string,
+  i: string,
+  d: string
 }
 
 const SEND = true
@@ -57,7 +60,10 @@ const DUMMY_RESPONSE: Status = {
     left: 0,
     right: 0,
     back: 0
-  }
+  },
+  p: "0",
+  i: "0",
+  d: "0"
 }
 
 export class RaibotController {
@@ -92,7 +98,10 @@ export class RaibotController {
           left: 0,
           right: 0,
           back: 0
-        }
+        },
+        p: "0",
+        i: "0",
+        d: "0"
       }
     }
 
